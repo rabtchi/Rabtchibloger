@@ -41,3 +41,5 @@ npm start
 ## الأمان
 
 `SUPABASE_SERVICE_ROLE_KEY`, `PAYPAL_CLIENT_SECRET`, و`OPENAI_API_KEY` متغيرات server-side فقط ولا يجب كشفها للمتصفح.
+
+<!-- production deployment trigger: latest main includes embedded authentication and admin security -->
