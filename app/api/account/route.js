@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-function server() {
+function server(token) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
@@ -11,6 +11,11 @@ function server() {
   if (!url || !key) throw Error("Supabase client configuration is missing");
 
   return createClient(url, key, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
@@ -20,7 +25,7 @@ export async function GET(req) {
     const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-    const db = server();
+    const db = server(token);
     const { data: authData, error: authError } = await db.auth.getUser(token);
     if (authError || !authData?.user) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
