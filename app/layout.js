@@ -1,2 +1,2 @@
 export const metadata={title:"Rabtchibloger",description:"منصة احترافية لإنشاء وإدارة المقالات بالذكاء الاصطناعي"};
-export default function RootLayout({children}){return <html lang="ar" dir="rtl"><body style={{margin:0}}>{children}</body></html>}
+export default function RootLayout({children}){return <html lang="ar" dir="rtl"><body style={{margin:0}}>{children}<a href="/admin" aria-label="لوحة الإدارة" style={{position:"fixed",left:18,bottom:18,zIndex:9999,display:"inline-flex",alignItems:"center",gap:8,padding:"11px 15px",borderRadius:999,textDecoration:"none",background:"#f3e8ff",color:"#6d28d9",border:"1px solid #ddd6fe",boxShadow:"0 8px 25px rgba(15,23,42,.16)",fontFamily:"Arial,sans-serif",fontSize:13,fontWeight:800}}>🔐 لوحة الإدارة</a></body></html>}
