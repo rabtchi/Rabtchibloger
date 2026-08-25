@@ -2,17 +2,20 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-function client() {
+function client(token) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) throw Error("Supabase client configuration is missing");
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return createClient(url, key, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 async function requireAdmin(req) {
   const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   if (!token) throw Object.assign(Error("Unauthorized"), { status: 401 });
-  const db = client();
+  const db = client(token);
   const { data: authData, error } = await db.auth.getUser(token);
   if (error || !authData?.user) throw Object.assign(Error("Unauthorized"), { status: 401 });
   const { data: profile, error: profileError } = await db.from("profiles").select("role").eq("id", authData.user.id).maybeSingle();
