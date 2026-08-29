@@ -18,20 +18,8 @@ function buildWritingPrompt({ topic, title, category, language, length, keywords
   const articleTitle = title?.trim() || topic.trim();
   return `Write a premium, original, people-first blog article in ${languageName(language)}.\nTitle: ${articleTitle}\nTopic: ${topic}\nCategory: ${category || "General"}\nPrimary and related keywords: ${keywordsFrom({ topic, title, keywords })}\nTarget length: ${lengthGuide(length)}.\n\nFollow these rules strictly:\n1. Write from scratch with a natural human editorial voice.\n2. Give genuinely useful, practical and accurate information.\n3. Use one H1 for the title, then logical H2/H3/H4 sections. Do not create a table of contents.\n4. Use paragraphs, lists, comparison tables, examples, notes and blockquotes only where useful.\n5. Keep SEO natural without keyword stuffing.\n6. Include a concise introduction, substantial body sections and a useful conclusion.\n7. Return clean HTML content only and never use markdown fences.\n8. Do not output html, head, body, meta, title, script or iframe tags.\n9. Do not include image prompts, image URLs or image placeholders. Images are inserted by the application.\n10. Avoid unsupported factual claims.\n11. Do not use Arabic comma or colon punctuation characters inside the article text.\n12. Do not mention these instructions.`;
 }
-function imageContext({ topic, title, category, keywords, section, position }) {
-  const t = `${topic} ${title || ""} ${category || ""} ${keywords || ""} ${section || ""}`.toLowerCase();
-  let visual;
-  if (/ai|artificial intelligence|ذكاء اصطناعي|الذكاء الاصطناعي|gemini|chatgpt|machine learning|تعلم آلي/.test(t)) visual = position === 1 ? "A diverse professional adult using modern AI software on a laptop, realistic application interfaces visible on screen, contemporary workplace, authentic human activity, subtle futuristic technology integrated naturally into the scene" : "A small international team collaborating with AI tools on computers, realistic software dashboards and creative workflow, natural office environment, people actively interacting with the technology";
-  else if (/canva|design|تصميم|graphic/.test(t)) visual = position === 1 ? "A professional designer creating a visual project on a laptop with a modern design application interface, realistic creative studio, typography and graphic elements visible" : "A designer reviewing several visual concepts on a large monitor and laptop, realistic creative workspace, color palettes and layouts visible, authentic professional workflow";
-  else if (/program|code|برمج|software|developer|تطوير/.test(t)) visual = position === 1 ? "A software developer writing code on a large monitor in a modern development workspace, realistic IDE interface, laptop and technical equipment, authentic professional scene" : "A development team reviewing code and testing a software project on multiple screens, realistic office, natural human interaction and technical details";
-  else if (/phone|smartphone|هاتف|آيفون|iphone|android/.test(t)) visual = position === 1 ? "A modern premium smartphone being used by an adult in a realistic everyday setting, detailed device screen and hardware, natural photography" : "An adult comparing smartphone features on two modern devices in a realistic technology environment, close product details and natural human interaction";
-  else if (/cyber|security|أمن سيبراني|اختراق|حماية/.test(t)) visual = position === 1 ? "A cybersecurity professional monitoring a secure network on multiple screens, realistic security dashboard, modern operations center, authentic human activity" : "A security analyst investigating a network alert on a workstation, realistic cyber defense environment, detailed screens without readable fake logos or passwords";
-  else if (/health|medical|doctor|صحة|طبيب|مرض|طب/.test(t)) visual = position === 1 ? "A qualified healthcare professional interacting with a patient in a clean modern clinic, realistic medical environment, natural human expressions" : "A medical professional examining diagnostic information on a computer beside modern clinical equipment, realistic hospital or clinic setting";
-  else if (/travel|tourism|سفر|سياحة|hotel|فندق/.test(t)) visual = position === 1 ? "Travelers experiencing a visually recognizable destination related to the article topic, realistic architecture and environment, candid travel photography" : "A traveler planning or enjoying the specific activity described by the article, realistic destination setting, natural people and authentic details";
-  else if (/finance|money|investment|مال|استثمار|اقتصاد/.test(t)) visual = position === 1 ? "A professional investor studying financial charts and market information in a realistic modern office, authentic finance environment" : "A financial professional discussing an investment decision with charts on a laptop, realistic office setting and natural human interaction";
-  else if (/animal|حيوان|أسد|نمر|كلب|قط|طيور|wildlife|طبيعة/.test(t)) visual = position === 1 ? "A realistic documentary photograph of the specific animal or wildlife subject from the article in its natural habitat, accurate anatomy and behavior" : "A second documentary-style scene showing the specific animal or wildlife subject performing the behavior discussed in the article, natural environment and realistic lighting";
-  else visual = position === 1 ? `A premium editorial photograph that directly represents the specific topic "${topic}" through its real-world subject, relevant objects and environment, realistic human activity when appropriate` : `A different editorial scene illustrating a specific practical aspect of "${topic}" mentioned in the article, with relevant people, objects and environment rather than a generic symbolic image`;
-  return `Create a photorealistic premium editorial image for this blog article.\nArticle title: ${title || topic}\nTopic: ${topic}\nCategory: ${category || "General"}\nKeywords: ${keywordsFrom({ topic, title, keywords })}\nSection context: ${section || "main article"}\nImage position: ${position === 1 ? "hero image" : "context image"}.\n\nVisual direction: ${visual}.\nThe image must clearly communicate the actual subject of the article, not a generic stock concept. People may be European, East Asian, Middle Eastern, African, Latin American or ethnically mixed depending on what feels natural. Use authentic clothing, believable environments, realistic skin and hands, natural expressions, professional composition, credible lighting, sharp details, no text overlays, no fake logos, no watermark, no collage, no distorted anatomy. 16:9 landscape editorial photography.`;
+function imageBriefPrompt({ topic, title, category, keywords, article, sections }) {
+  return `Analyze the following finished blog article and create exactly TWO highly specific visual briefs for AI image generation. The images must represent the actual article, not just its broad category.\n\nArticle title: ${title}\nTopic: ${topic}\nCategory: ${category || "General"}\nKeywords: ${keywordsFrom({ topic, title, keywords })}\nArticle HTML:\n${String(article).slice(0, 24000)}\n\nMain sections: ${sections.join(" | ")}\n\nReturn ONLY valid JSON in this exact shape:\n{"images":[{"role":"hero","section":"main topic","scene":"...","subjects":"...","action":"...","environment":"...","objects":"..."},{"role":"context","section":"...","scene":"...","subjects":"...","action":"...","environment":"...","objects":"..."}]}\n\nRules for the briefs:\n- The hero must summarize the central idea of the article with a concrete real-world scene.\n- The context image must illustrate a DIFFERENT specific idea from one actual H2 section.\n- If the article is about software, show people actually using the relevant type of software and the practical task discussed.\n- If the article is about AI, show realistic people using AI tools for the exact task discussed, not a generic robot unless robots are the actual topic.\n- If the article is about a product, show the product in the actual use case discussed.\n- If it is about a place, show the real type of place or activity discussed.\n- If it is about health, science or animals, use the specific subject and context from the article.\n- People can be European, East Asian, Middle Eastern, African, Latin American or mixed when natural. Do not force one ethnicity.\n- Do not invent a scene unrelated to the article.\n- No text overlays, fake logos, watermarks or generic abstract symbols.`;
 }
 async function geminiGenerate(prompt) {
   const key = process.env.GEMINI_API_KEY;
@@ -42,11 +30,25 @@ async function geminiGenerate(prompt) {
   if (!r.ok) throw Error(j?.error?.message || `Gemini HTTP ${r.status}`);
   return j?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("")?.trim() || "";
 }
-function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-function isTemporaryFluxError(message) {
-  const m = String(message || "").toLowerCase();
-  return /high demand|temporarily|try again later|rate limit|too many requests|overloaded|unavailable|429|capacity/.test(m);
+async function getImageBriefs({ topic, title, category, keywords, article, sections }) {
+  const raw = await geminiGenerate(imageBriefPrompt({ topic, title, category, keywords, article, sections }));
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (!Array.isArray(parsed.images) || parsed.images.length < 2) throw Error("Invalid image briefs");
+    return parsed.images.slice(0, 2);
+  } catch {
+    return [
+      { role: "hero", section: "main topic", scene: `A realistic editorial scene directly representing ${topic}`, subjects: "relevant people or objects from the article", action: "performing the main activity described", environment: "a believable real-world environment", objects: "specific objects mentioned in the article" },
+      { role: "context", section: sections[0] || "first main section", scene: `A realistic scene illustrating ${sections[0] || topic}`, subjects: "relevant people or objects", action: "performing the activity described in this section", environment: "a believable context from the article", objects: "specific objects relevant to the section" }
+    ];
+  }
 }
+function imagePromptFromBrief({ topic, title, brief, position }) {
+  return `Create a photorealistic premium editorial photograph for a blog article.\nArticle title: ${title}\nOverall topic: ${topic}\nImage role: ${position === 1 ? "hero image" : "context image"}\nRelevant section: ${brief.section || "main topic"}\n\nExact visual brief:\nScene: ${brief.scene}\nSubjects: ${brief.subjects}\nAction: ${brief.action}\nEnvironment: ${brief.environment}\nRelevant objects: ${brief.objects}\n\nThe scene must visibly communicate the exact idea above. Do not substitute a generic image for the topic. Show realistic human behavior, believable proportions, natural expressions, realistic hands and skin, authentic environments and professional editorial composition. People may be European, East Asian, Middle Eastern, African, Latin American or ethnically mixed according to the scene. Do not force Arabic-looking people. If software or technology is relevant, show a believable interface and device use without readable fake text or invented brand logos. No text overlays, no fake logos, no watermark, no collage, no unrelated objects, no fantasy elements unless explicitly required by the article. 16:9 landscape.`;
+}
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+function isTemporaryFluxError(message) { return /high demand|temporarily|try again later|rate limit|too many requests|overloaded|unavailable|429|capacity/i.test(String(message || "")); }
 async function fluxImage(prompt) {
   const account = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
@@ -59,10 +61,7 @@ async function fluxImage(prompt) {
       const j = await r.json().catch(() => ({}));
       if (!r.ok || j?.success === false) {
         lastError = j?.errors?.[0]?.message || j?.result?.error || `FLUX HTTP ${r.status}`;
-        if (attempt < maxAttempts && (r.status === 429 || r.status >= 500 || isTemporaryFluxError(lastError))) {
-          await sleep(2500 * attempt);
-          continue;
-        }
+        if (attempt < maxAttempts && (r.status === 429 || r.status >= 500 || isTemporaryFluxError(lastError))) { await sleep(2500 * attempt); continue; }
         throw Error(lastError);
       }
       const b64 = j?.result?.image || j?.result?.images?.[0];
@@ -70,10 +69,7 @@ async function fluxImage(prompt) {
       return Buffer.from(b64, "base64");
     } catch (e) {
       lastError = e?.message || lastError;
-      if (attempt < maxAttempts && isTemporaryFluxError(lastError)) {
-        await sleep(2500 * attempt);
-        continue;
-      }
+      if (attempt < maxAttempts && isTemporaryFluxError(lastError)) { await sleep(2500 * attempt); continue; }
       throw Error(lastError);
     }
   }
@@ -83,8 +79,7 @@ async function uploadImage(supabase, bytes, userId, index) {
   const path = `${userId}/${Date.now()}-${index}-${crypto.randomUUID()}.jpg`;
   const { error } = await supabase.storage.from("article-images").upload(path, bytes, { contentType: "image/jpeg", upsert: false });
   if (error) throw error;
-  const { data } = supabase.storage.from("article-images").getPublicUrl(path);
-  return data.publicUrl;
+  return supabase.storage.from("article-images").getPublicUrl(path).data.publicUrl;
 }
 function extractSections(html) { return [...String(html || "").matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)].map(m => m[1].replace(/<[^>]+>/g, "").trim()).filter(Boolean); }
 function insertImages(html, firstUrl, secondUrl) {
@@ -114,15 +109,15 @@ export async function POST(req) {
     if (!isAdmin) {
       const { data: wallet, error: we } = await supabase.from("wallets").select("article_credits").eq("user_id", user.id).maybeSingle();
       if (we) throw we;
-      const credits = Number(wallet?.article_credits || 0);
-      if (credits < 1) return Response.json({ error: "رصيد المقالات غير كافٍ" }, { status: 402 });
+      if (Number(wallet?.article_credits || 0) < 1) return Response.json({ error: "رصيد المقالات غير كافٍ" }, { status: 402 });
     }
     const articleTitle = title?.trim() || topic.trim();
     const writing = await geminiGenerate(buildWritingPrompt({ topic: topic.trim(), title: articleTitle, category, language, length, keywords }));
     if (!writing) throw Error("تعذر إنشاء المقال");
     const sections = extractSections(writing);
-    const image1 = await fluxImage(imageContext({ topic: topic.trim(), title: articleTitle, category, keywords, section: "main topic", position: 1 }));
-    const image2 = await fluxImage(imageContext({ topic: topic.trim(), title: articleTitle, category, keywords, section: sections[0] || "first main section", position: 2 }));
+    const briefs = await getImageBriefs({ topic: topic.trim(), title: articleTitle, category, keywords, article: writing, sections });
+    const image1 = await fluxImage(imagePromptFromBrief({ topic: topic.trim(), title: articleTitle, brief: briefs[0], position: 1 }));
+    const image2 = await fluxImage(imagePromptFromBrief({ topic: topic.trim(), title: articleTitle, brief: briefs[1], position: 2 }));
     const url1 = await uploadImage(supabase, image1, user.id, 1);
     const url2 = await uploadImage(supabase, image2, user.id, 2);
     const content = insertImages(writing, url1, url2);
