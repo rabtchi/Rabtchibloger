@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "../lib/supabase";
 import { CONTENT_CATEGORIES } from "./data/content-options";
+import PricingShowcase from "./components/PricingShowcase";
 
 const inputStyle={width:"100%",boxSizing:"border-box",padding:14,borderRadius:12,border:"1px solid #d1d5db",fontSize:15};
 const btn={border:0,borderRadius:12,padding:"13px 18px",cursor:"pointer",fontWeight:800};
@@ -52,6 +53,8 @@ export default function Home(){
       {imagePrompt&&<div style={{marginTop:24,padding:20,borderRadius:18,border:"1px solid #c7d2fe",background:"#fafaff"}}><div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center",flexWrap:"wrap"}}><div><h3 style={{margin:0}}>🖼️ برومبت الصورة الجاهز</h3><p style={{margin:"5px 0 0",color:"#6b7280",fontSize:13}}>يمكنك نسخه واستخدامه مباشرة في مولد الصور.</p></div><button onClick={copyPrompt} style={{...btn,background:"#4f46e5",color:"#fff",padding:"10px 14px"}}>{copied?"✓ تم النسخ":"📋 نسخ البرومبت"}</button></div><textarea readOnly value={imagePrompt} style={{...inputStyle,minHeight:170,marginTop:16,resize:"vertical",lineHeight:1.7,direction:"ltr",textAlign:"left",background:"#fff"}}/></div>}
       {article&&<article style={{marginTop:28,borderTop:"1px solid #eee",paddingTop:24,lineHeight:1.9}}><h2>{article.title}</h2><div dangerouslySetInnerHTML={{__html:article.content}}/><button onClick={()=>r.push("/articles")} style={{...btn,marginTop:16,background:"#111827",color:"#fff"}}>مقالاتي والتصدير</button></article>}
     </div></section>
+
+    <PricingShowcase admin={admin}/>
 
     {authOpen&&<div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.55)",display:"grid",placeItems:"center",padding:18,zIndex:50}}><form onSubmit={submitAuth} style={{width:"min(430px,100%)",background:"#fff",padding:26,borderRadius:20,boxShadow:"0 20px 60px rgba(0,0,0,.25)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h2 style={{margin:0}}>{authMode==="login"?"تسجيل الدخول":"إنشاء حساب"}</h2><button type="button" onClick={()=>setAuthOpen(false)} style={{background:"transparent",border:0,fontSize:22,cursor:"pointer"}}>×</button></div>{authMode==="signup"&&<input required value={name} onChange={e=>setName(e.target.value)} placeholder="الاسم الكامل" style={{...inputStyle,marginTop:18}}/>}<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="البريد الإلكتروني" style={{...inputStyle,marginTop:12}}/><input required type="password" minLength={6} value={password} onChange={e=>setPassword(e.target.value)} placeholder="كلمة المرور" style={{...inputStyle,marginTop:12}}/><button disabled={authBusy} style={{...btn,width:"100%",marginTop:16,background:"#4f46e5",color:"#fff"}}>{authBusy?"جارٍ المعالجة...":authMode==="login"?"دخول":"إنشاء الحساب"}</button>{authMsg&&<p style={{padding:12,background:"#f3f4f6",borderRadius:10,lineHeight:1.6}}>{authMsg}</p>}<button type="button" onClick={()=>{setAuthMode(authMode==="login"?"signup":"login");setAuthMsg("")}} style={{marginTop:14,background:"transparent",border:0,color:"#4f46e5",cursor:"pointer"}}>{authMode==="login"?"ليس لديك حساب؟ إنشاء حساب":"لديك حساب؟ تسجيل الدخول"}</button></form></div>}
   </main>
