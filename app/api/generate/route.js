@@ -1,17 +1,189 @@
-import{createClient}from"@supabase/supabase-js";
-function server(){const u=process.env.NEXT_PUBLIC_SUPABASE_URL,k=process.env.SUPABASE_SERVICE_ROLE_KEY;if(!u||!k)throw Error("Server configuration is incomplete");return createClient(u,k,{auth:{persistSession:false,autoRefreshToken:false}})}
-function esc(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]||c))}
-function youtubeSearch(q){return `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`}
-function keywordsFrom({topic,title,keywords}){const raw=Array.isArray(keywords)?keywords.join(","):String(keywords||"");const base=raw.trim()||title?.trim()||topic.trim();return base.split(/[,،\n]/).map(x=>x.trim()).filter(Boolean).slice(0,8).join(", ")||topic.trim()}
-function languageName(language){return language==='ar'?'العربية':language==='fr'?'الفرنسية':language==='en'?'الإنجليزية':language||'العربية'}
-function lengthGuide(length){return length==='short'?'1200 إلى 1600 كلمة تقريبًا':length==='long'?'3000 إلى 5000 كلمة تقريبًا':'2000 إلى 3500 كلمة تقريبًا'}
-function buildWritingPrompt({topic,title,category,language,length,keywords}){const articleTitle=title?.trim()||topic.trim();const key=keywordsFrom({topic,title,keywords});const lang=languageName(language);return `أنت كاتب محتوى عربي محترف وخبير SEO ومحرر مواقع. أنشئ مقالًا أصليًا عميقًا وقابلًا للنشر مباشرة.\n\nالبيانات:\nعنوان المقال: ${articleTitle}\nالموضوع: ${topic}\nالكلمة المفتاحية الرئيسية: ${key}\nالتصنيف: ${category||'عام'}\nاللغة: ${lang}\nالطول: ${lengthGuide(length)}\n\nالتزم حرفيًا بالتالي:\n1. اكتب باللغة المطلوبة فقط وبأسلوب بشري طبيعي وسلس وقريب من القارئ.\n2. اجعل المحتوى People-First ويقدم قيمة عملية حقيقية مع الالتزام بـ E-E-A-T. لا تخترع معلومات أو أرقامًا أو مصادر.\n3. المقال حصري من الصفر وليس إعادة صياغة لمحتوى منشور.\n4. ابدأ بإجابة واضحة ومباشرة عن سؤال القارئ ثم توسع في الشرح.\n5. استخدم العنوان الرئيسي مرة واحدة فقط داخل H2 وليس H1. استخدم H3 للأقسام الرئيسية وH4 للنقاط الفرعية.\n6. استخدم قوائم نقطية ورقمية وجداول HTML عند الحاجة وblockquote ومربعات ملاحظات مفيدة. اجعل المقال غنيًا بصريًا وسهل القراءة على الهاتف.\n7. لا تضع جدول محتويات أو جدول تنقل داخل المقال.\n8. لا تضف أكواد meta أو html أو head أو body أو title أو script أو style أو iframe.\n9. لا تضع CSS عامًا. سنضيف CSS مغلقًا على حاوية المقال فقط بعد التوليد.\n10. لا تستخدم الفاصلة العربية ، ولا النقطتين : ولا التشكيل. استخدم النقطة عند الحاجة.\n11. لا تضف صورًا أو روابط صور بنفسك. النظام سيضيف صورتين مولدتين بالذكاء الاصطناعي داخل المقال وفق الموضوع والأقسام.\n12. اجعل الفقرات والقوائم مرتبة وواضحة. اجعل القوائم تبدأ في سطر مستقل.\n13. لا تكتب أي شرح خارج HTML.\n\nأخرج HTML للمحتوى فقط. ابدأ بعنوان المقال داخل H2: ${articleTitle}`} 
-function imagePrompt({topic,title,category,keywords,language,focus,position}){const key=keywordsFrom({topic,title,keywords});return `Create a premium editorial blog image directly illustrating this article. Main topic: ${topic}. Article title: ${title||topic}. Category: ${category||'general'}. Keywords: ${key}. Language context: ${languageName(language)}. Image role: ${position}. Specific visual focus: ${focus||topic}. Translate the meaning into a concrete realistic scene with objects and people only when relevant. High-end commercial photography, cinematic natural lighting, vibrant but harmonious colors, sharp focus, realistic anatomy, logical objects, clean composition, medium safety padding around all edges. The main subject must be large and dominant. No random symbols, no unrelated objects, no collage, no watermark, no logo, no text overlay, no distorted hands, no artifacts. 16:9 landscape 1280x720 suitable for a professional Arabic blog article.`}
-async function generateImage(prompt){const account=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API_TOKEN;if(!account||!token)throw Error("خدمة FLUX غير مهيأة. أضف CLOUDFLARE_ACCOUNT_ID و CLOUDFLARE_API_TOKEN في Vercel.");const model=process.env.CLOUDFLARE_FLUX_MODEL||"@cf/black-forest-labs/flux-1-schnell";const url=`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/ai/run/${model.split('/').map(encodeURIComponent).join('/')}`;const r=await fetch(url,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({prompt,steps:4})});const data=await r.json().catch(()=>({}));if(!r.ok||data?.success===false)throw Error(data?.errors?.map?.(x=>x.message).join("; ")||data?.error?.message||`تعذر توليد صورة FLUX (${r.status})`);const b64=data?.result?.image||data?.image;if(!b64)throw Error("لم تُرجع خدمة FLUX صورة فعلية");return Buffer.from(b64,"base64")}
-async function uploadImage(db,userId,buffer,index){const bucket=process.env.SUPABASE_ARTICLE_IMAGES_BUCKET||"article-images";try{await db.storage.createBucket(bucket,{public:true,allowedMimeTypes:["image/jpeg","image/png","image/webp"],fileSizeLimit:"10MB"})}catch{}const path=`${userId}/${Date.now()}-${index}-${Math.random().toString(36).slice(2,10)}.jpg`;const{data,error}=await db.storage.from(bucket).upload(path,buffer,{contentType:"image/jpeg",cacheControl:"31536000",upsert:false});if(error)throw error;const{data:pub}=db.storage.from(bucket).getPublicUrl(data.path);if(!pub?.publicUrl)throw Error("تعذر الحصول على رابط الصورة");return pub.publicUrl}
-function extractFocus(html,topic){const headings=[...String(html||"").matchAll(/<h[34][^>]*>([\s\S]*?)<\/h[34]>/gi)].map(m=>m[1].replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim()).filter(Boolean);return headings[0]||topic}
-function injectFigure(html,url,ctx,position,focus){const key=keywordsFrom(ctx);const label=position===1?"الصورة الرئيسية للمقال":"صورة توضيحية مرتبطة بأحد أقسام المقال";const figure=`<figure class="rabtchi-ai-image"><img src="${esc(url)}" alt="${esc(key)} - ${esc(label)}" loading="lazy"><figcaption>${esc(label)} مولدة بالذكاء الاصطناعي وفق موضوع المقال.</figcaption></figure>`;if(position===1){const h=html.match(/<h2\b[\s\S]*?<\/h2>/i);if(h){const end=html.indexOf(h[0])+h[0].length;return html.slice(0,end)+figure+html.slice(end)}return figure+html}const headings=[...html.matchAll(/<h3\b[^>]*>[\s\S]*?<\/h3>/gi)];if(headings.length){const h=headings[Math.min(1,headings.length-1)];const end=html.indexOf(h[0])+h[0].length;return html.slice(0,end)+figure+html.slice(end)}const paragraphs=[...html.matchAll(/<p\b[\s\S]*?<\/p>/gi)];if(paragraphs.length>3){const p=paragraphs[Math.floor(paragraphs.length/2)];const end=html.indexOf(p[0])+p[0].length;return html.slice(0,end)+figure+html.slice(end)}return html+figure}
-function addScopedStyle(html){return `<div class="rabtchi-article"><style>.rabtchi-article{width:100%;box-sizing:border-box;direction:rtl;font-family:Tahoma,Arial,sans-serif;color:#172033;line-height:2;font-size:18px}.rabtchi-article h2{font-size:32px;line-height:1.45;margin:0 0 24px;font-weight:900;color:#172033}.rabtchi-article h3{font-size:26px;line-height:1.5;margin:42px 0 16px;color:#243b75;border-right:5px solid #5b67f1;padding-right:14px}.rabtchi-article h4{font-size:21px;margin:28px 0 12px;color:#334155}.rabtchi-article p{margin:0 0 22px}.rabtchi-article ul,.rabtchi-article ol{margin:12px 0 28px;padding:18px 38px 18px 18px;background:#f8fafc;border-radius:16px}.rabtchi-article li{margin:8px 0}.rabtchi-article blockquote{margin:28px 0;padding:20px 24px;border-right:5px solid #6366f1;background:#eef2ff;border-radius:14px;font-weight:700}.rabtchi-article table{width:100%;border-collapse:collapse;margin:28px 0;overflow:hidden;border-radius:14px}.rabtchi-article th,.rabtchi-article td{padding:13px;border:1px solid #e5e7eb;text-align:right}.rabtchi-article th{background:#eef2ff;font-weight:900}.rabtchi-article a{color:#4f46e5;text-decoration:none}.rabtchi-article .rabtchi-note{padding:18px 20px;margin:25px 0;background:#fff7ed;border:1px solid #fed7aa;border-radius:15px}.rabtchi-article .rabtchi-ai-image{margin:34px 0 38px;padding:0;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 12px 35px rgba(15,23,42,.10)}.rabtchi-article .rabtchi-ai-image img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover}.rabtchi-article .rabtchi-ai-image figcaption{padding:10px 16px;text-align:center;font-size:13px;color:#64748b;background:#f8fafc}.rabtchi-article strong{font-weight:900}@media(max-width:700px){.rabtchi-article{font-size:16px}.rabtchi-article h2{font-size:27px}.rabtchi-article h3{font-size:23px}.rabtchi-article h4{font-size:19px}.rabtchi-article ul,.rabtchi-article ol{padding-right:30px}}</style>${html}</div>`}
-function addVideos(html,ctx){const key=keywordsFrom(ctx);return html+`<div class="rabtchi-note"><strong>🎥 فيديوهات مرتبطة بالموضوع</strong><p><a href="${youtubeSearch(`${key} شرح وتفسير`)}" target="_blank" rel="nofollow noopener noreferrer">مشاهدة فيديوهات شرح مرتبطة بالموضوع</a></p><p><a href="${youtubeSearch(`${key} نصائح وتطبيقات`)}" target="_blank" rel="nofollow noopener noreferrer">مشاهدة فيديوهات تطبيقية ونصائح</a></p></div>`}
-function sanitizeHtml(input){let html=String(input||"");html=html.replace(/^```(?:html)?\s*/i,"").replace(/\s*```$/i,"").replace(/<!--[\s\S]*?-->/g,"").replace(/<\/?(script|iframe|object|embed|form|input|button|svg|math|meta|link|base)[^>]*>/gi,"").replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,"").replace(/\s(?:href|src)\s*=\s*(?:"\s*javascript:[^"]*"|'\s*javascript:[^']*'|\s*javascript:[^\s>]+)/gi,"");html=html.replace(/<(?!\/?(?:h2|h3|h4|p|ul|ol|li|strong|em|b|i|br|blockquote|a|img|figure|figcaption|div|span|table|thead|tbody|tr|th|td)\b)[^>]*>/gi,"");html=html.replace(/<a\b([^>]*)>/gi,(m,a)=>{const href=(a.match(/href\s*=\s*["']([^"']+)["']/i)||[])[1]||"";if(!/^https?:\/\//i.test(href))return "<a>";return `<a href="${href.replace(/"/g,"&quot;")}" rel="nofollow noopener noreferrer" target="_blank">`});html=html.replace(/<img\b([^>]*)>/gi,(m,a)=>{const src=(a.match(/src\s*=\s*["']([^"']+)["']/i)||[])[1]||"";const alt=(a.match(/alt\s*=\s*["']([^"']*)["']/i)||[])[1]||"";if(!/^https?:\/\//i.test(src))return "";return `<img src="${src.replace(/"/g,"&quot;")}" alt="${alt.replace(/["<>]/g,"")}" loading="lazy">`});return html.trim()}
-export async function POST(req){try{const token=(req.headers.get("authorization")||"").replace(/^Bearer\s+/i,"");if(!token)return Response.json({error:"Unauthorized"},{status:401});const u=process.env.NEXT_PUBLIC_SUPABASE_URL,k=process.env.SUPABASE_SERVICE_ROLE_KEY,api=process.env.GEMINI_API_KEY;if(!u||!k)return Response.json({error:"Supabase server configuration is missing"},{status:500});if(!api)return Response.json({error:"خدمة الذكاء الاصطناعي غير مهيأة. أضف GEMINI_API_KEY في Vercel."},{status:503});const db=server(),{data:{user},error}=await db.auth.getUser(token);if(error||!user)return Response.json({error:"Unauthorized"},{status:401});const body=await req.json(),{topic,title,category="",language="ar",length="medium",keywords=""}=body;if(!topic?.trim())return Response.json({error:"اختر موضوع المقال أولًا"},{status:400});const{data:profile}=await db.from("profiles").select("role").eq("id",user.id).maybeSingle();const admin=profile?.role==="admin";const{data:wallet,error:we}=await db.from("wallets").select("article_credits").eq("user_id",user.id).maybeSingle();if(we)throw we;if(!admin&&Number(wallet?.article_credits||0)<1)return Response.json({error:"رصيد المقالات غير كافٍ. يرجى شراء باقة للمتابعة."},{status:402});const model=process.env.GEMINI_MODEL||"gemini-3.6-flash";const prompt=buildWritingPrompt({topic,title,category,language,length,keywords});const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(api)}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:"أنت كاتب محتوى ومحرر SEO محترف. اكتب محتوى أصليًا مفيدًا ودقيقًا بأسلوب طبيعي. التزم بتعليمات المستخدم وأخرج HTML فقط."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.65}})});const data=await r.json();if(!r.ok)return Response.json({error:data?.error?.message||"AI generation failed"},{status:502});const content=data?.candidates?.[0]?.content?.parts?.map(p=>p?.text||"").join("").trim();if(!content)return Response.json({error:"لم يتم إنشاء محتوى"},{status:502});const ctx={topic,title,keywords,category,language};let cleanText=sanitizeHtml(content);let image1="",image2="";try{image1=await uploadImage(db,user.id,await generateImage(imagePrompt({...ctx,position:"main featured image",focus:topic}),1),1);const focus=extractFocus(cleanText,topic);image2=await uploadImage(db,user.id,await generateImage(imagePrompt({...ctx,position:"in-article explanatory image",focus}),2),2)}catch(imageError){return Response.json({error:`تم إنشاء المقال لكن تعذر توليد الصور: ${imageError.message||"خطأ غير معروف"}`},{status:502})}cleanText=injectFigure(cleanText,image1,ctx,1,topic);cleanText=injectFigure(cleanText,image2,ctx,2,extractFocus(cleanText,topic));const clean=addScopedStyle(addVideos(cleanText,ctx));if(!clean)return Response.json({error:"تعذر إنشاء محتوى آمن"},{status:502});const{data:article,error:insertError}=await db.from("articles").insert({user_id:user.id,title:title?.trim()||topic.trim().slice(0,300),content:clean,status:"draft"}).select().single();if(insertError)throw insertError;if(!admin){const{data:consumed,error:consumeError}=await db.rpc("consume_article_credit",{p_user_id:user.id,p_article_id:article.id});if(consumeError)throw consumeError;if(!consumed){await db.from("articles").delete().eq("id",article.id).eq("user_id",user.id);return Response.json({error:"رصيد المقالات غير كافٍ"},{status:402})}}return Response.json({article,image_urls:[image1,image2]},{status:201})}catch(e){return Response.json({error:e.message||"Generation failed"},{status:500})}}
+import { createClient } from "@supabase/supabase-js";
+
+function server() {
+  const u = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const k = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!u || !k) throw Error("Server configuration is incomplete");
+  return createClient(u, k, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+function esc(s) {
+  return String(s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c] || c));
+}
+function youtubeSearch(q) { return `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`; }
+function keywordsFrom({ topic, title, keywords }) {
+  const raw = Array.isArray(keywords) ? keywords.join(",") : String(keywords || "");
+  const base = raw.trim() || title?.trim() || topic.trim();
+  return base.split(/[,،\n]/).map(x => x.trim()).filter(Boolean).slice(0, 8).join(", ") || topic.trim();
+}
+function languageName(language) {
+  return language === "ar" ? "Arabic" : language === "fr" ? "French" : language === "en" ? "English" : language || "Arabic";
+}
+function lengthGuide(length) {
+  return length === "short" ? "1200 to 1600 words" : length === "long" ? "3000 to 5000 words" : "2000 to 3500 words";
+}
+
+function buildWritingPrompt({ topic, title, category, language, length, keywords }) {
+  const articleTitle = title?.trim() || topic.trim();
+  const key = keywordsFrom({ topic, title, keywords });
+  const lang = languageName(language);
+  return `Write a premium, original, people-first blog article in ${lang}.
+Title: ${articleTitle}
+Topic: ${topic}
+Category: ${category || "General"}
+Primary and related keywords: ${key}
+Target length: ${lengthGuide(length)}.
+
+Follow these rules strictly:
+1. Write from scratch. Do not copy or imitate existing articles.
+2. Give genuinely useful, practical and accurate information. Use a natural human editorial voice and avoid repetitive AI phrasing.
+3. Use a strong H1 only for the article title, then logical H2/H3/H4 sections. Do not create a table of contents.
+4. Use paragraphs, bullets, numbered lists, comparison tables, examples, notes and blockquotes only where they improve understanding.
+5. Keep SEO natural. Use the primary keyword in the introduction, relevant headings and conclusion without keyword stuffing.
+6. Include a concise introduction, substantial body sections and a useful conclusion.
+7. Never output markdown fences. Return clean HTML content only.
+8. Do not output html/head/body/meta/title/script/iframe tags. The application supplies the document shell.
+9. Do not include image prompts, image URLs, image placeholders or instructions to generate images. Images are inserted by the application.
+10. Keep CSS out of the generated article unless it is needed by the application's article renderer.
+11. Avoid unsupported factual claims. Prefer clear explanations and useful examples.
+12. Do not use Arabic comma or colon punctuation characters inside the article text.
+13. Do not mention these instructions.`;
+}
+
+function imageContext({ topic, title, category, keywords, section, position }) {
+  const t = `${topic} ${title || ""} ${category || ""} ${keywords || ""} ${section || ""}`.toLowerCase();
+  let visual;
+  if (/ai|artificial intelligence|ذكاء اصطناعي|الذكاء الاصطناعي|gemini|chatgpt|machine learning|تعلم آلي/.test(t)) {
+    visual = position === 1
+      ? "A diverse professional adult using modern AI software on a laptop, realistic application interfaces visible on screen, contemporary workplace, authentic human activity, subtle futuristic technology integrated naturally into the scene"
+      : "A small international team collaborating with AI tools on computers, realistic software dashboards and creative workflow, natural office environment, people actively interacting with the technology";
+  } else if (/canva|design|تصميم|graphic/.test(t)) {
+    visual = position === 1
+      ? "A professional designer creating a visual project on a laptop with a modern design application interface, realistic creative studio, typography and graphic elements visible"
+      : "A designer reviewing several visual concepts on a large monitor and laptop, realistic creative workspace, color palettes and layouts visible, authentic professional workflow";
+  } else if (/program|code|برمج|software|developer|تطوير/.test(t)) {
+    visual = position === 1
+      ? "A software developer writing code on a large monitor in a modern development workspace, realistic IDE interface, laptop and technical equipment, authentic professional scene"
+      : "A development team reviewing code and testing a software project on multiple screens, realistic office, natural human interaction and technical details";
+  } else if (/phone|smartphone|هاتف|آيفون|iphone|android/.test(t)) {
+    visual = position === 1
+      ? "A modern premium smartphone being used by an adult in a realistic everyday setting, detailed device screen and hardware, natural photography"
+      : "An adult comparing smartphone features on two modern devices in a realistic technology environment, close product details and natural human interaction";
+  } else if (/cyber|security|أمن سيبراني|اختراق|حماية/.test(t)) {
+    visual = position === 1
+      ? "A cybersecurity professional monitoring a secure network on multiple screens, realistic security dashboard, modern operations center, authentic human activity"
+      : "A security analyst investigating a network alert on a workstation, realistic cyber defense environment, detailed screens without readable fake logos or passwords";
+  } else if (/health|medical|doctor|صحة|طبيب|مرض|طب/.test(t)) {
+    visual = position === 1
+      ? "A qualified healthcare professional interacting with a patient in a clean modern clinic, realistic medical environment, natural human expressions"
+      : "A medical professional examining diagnostic information on a computer beside modern clinical equipment, realistic hospital or clinic setting";
+  } else if (/travel|tourism|سفر|سياحة|hotel|فندق/.test(t)) {
+    visual = position === 1
+      ? "Travelers experiencing a visually recognizable destination related to the article topic, realistic architecture and environment, candid travel photography"
+      : "A traveler planning or enjoying the specific activity described by the article, realistic destination setting, natural people and authentic details";
+  } else if (/finance|money|investment|مال|استثمار|اقتصاد/.test(t)) {
+    visual = position === 1
+      ? "A professional investor studying financial charts and market information in a realistic modern office, authentic finance environment"
+      : "A financial professional discussing an investment decision with charts on a laptop, realistic office setting and natural human interaction";
+  } else if (/animal|حيوان|أسد|نمر|كلب|قط|طيور|wildlife|طبيعة/.test(t)) {
+    visual = position === 1
+      ? "A realistic documentary photograph of the specific animal or wildlife subject from the article in its natural habitat, accurate anatomy and behavior"
+      : "A second documentary-style scene showing the specific animal or wildlife subject performing the behavior discussed in the article, natural environment and realistic lighting";
+  } else {
+    visual = position === 1
+      ? `A premium editorial photograph that directly represents the specific topic "${topic}" through its real-world subject, relevant objects and environment, realistic human activity when appropriate`
+      : `A different editorial scene illustrating a specific practical aspect of "${topic}" mentioned in the article, with relevant people, objects and environment rather than a generic symbolic image`;
+  }
+  return `Create a photorealistic premium editorial image for this blog article.\nArticle title: ${title || topic}\nTopic: ${topic}\nCategory: ${category || "General"}\nKeywords: ${keywordsFrom({ topic, title, keywords })}\nSection context: ${section || "main article"}\nImage position: ${position === 1 ? "hero image" : "context image"}.\n\nVisual direction: ${visual}.\nThe image must clearly communicate the actual subject of the article, not a generic technology or abstract stock concept. People may be European, East Asian, Middle Eastern, African, Latin American or ethnically mixed depending on what feels natural for the scene; do not force Arabic-looking people. Use authentic clothing, believable environments, realistic skin and hands, natural expressions, professional composition, cinematic but credible lighting, sharp details, no text overlays, no fake logos, no watermark, no collage, no distorted anatomy, no fantasy elements unless the article itself is about fantasy. 16:9 landscape editorial photography.`;
+}
+
+async function geminiGenerate(prompt) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw Error("GEMINI_API_KEY is missing");
+  const models = [process.env.GEMINI_MODEL || "gemini-2.5-flash"];
+  let last;
+  for (const model of models) {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+      method: "POST", headers: { "Content-Type":"application/json" }, body: JSON.stringify({ contents:[{parts:[{text:prompt}]}] }, generationConfig: { temperature: 0.7 })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) return j?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")?.trim() || "";
+    last = j?.error?.message || `Gemini HTTP ${r.status}`;
+  }
+  throw Error(last || "Gemini generation failed");
+}
+
+async function fluxImage(prompt) {
+  const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  if (!account || !token) throw Error("Cloudflare Workers AI configuration is incomplete");
+  const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/@cf/black-forest-labs/flux-1-schnell`, {
+    method: "POST", headers: { "Authorization": `Bearer ${token}`, "Content-Type":"application/json" }, body: JSON.stringify({ prompt, steps: 4 })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j?.success === false) throw Error(j?.errors?.[0]?.message || j?.result?.error || `FLUX HTTP ${r.status}`);
+  const b64 = j?.result?.image || j?.result?.images?.[0];
+  if (!b64) throw Error("FLUX did not return an image");
+  return Buffer.from(b64, "base64");
+}
+
+async function uploadImage(supabase, bytes, userId, index) {
+  const path = `${userId}/${Date.now()}-${index}-${crypto.randomUUID()}.jpg`;
+  const { error } = await supabase.storage.from("article-images").upload(path, bytes, { contentType:"image/jpeg", upsert:false });
+  if (error) throw error;
+  const { data } = supabase.storage.from("article-images").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+function extractSections(html) {
+  const matches = [...String(html || "").matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
+  return matches.map(m => m[1].replace(/<[^>]+>/g, "").trim()).filter(Boolean);
+}
+function insertImages(html, firstUrl, secondUrl) {
+  let out = String(html || "");
+  const hero = `<figure class="rabtchi-article-image rabtchi-article-hero"><img src="${esc(firstUrl)}" alt="صورة توضيحية مرتبطة بموضوع المقال" loading="eager"/><figcaption>صورة توضيحية مرتبطة بموضوع المقال</figcaption></figure>`;
+  const second = `<figure class="rabtchi-article-image"><img src="${esc(secondUrl)}" alt="صورة توضيحية مرتبطة بأحد أقسام المقال" loading="lazy"/><figcaption>مشهد توضيحي مرتبط بمحتوى المقال</figcaption></figure>`;
+  out = out.replace(/<h1[^>]*>[\s\S]*?<\/h1>/i, m => `${m}${hero}`);
+  if (out === html) out = hero + out;
+  const h2 = /<h2[^>]*>[\s\S]*?<\/h2>/i;
+  out = out.replace(h2, m => `${m}${second}`);
+  if (out === html || !out.includes(second)) out += second;
+  return out;
+}
+
+export async function POST(req) {
+  const supabase = server();
+  try {
+    const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!token) return Response.json({ error:"Unauthorized" }, { status:401 });
+    const { data:{user}, error:ue } = await supabase.auth.getUser(token);
+    if (ue || !user) return Response.json({ error:"Unauthorized" }, { status:401 });
+    const body = await req.json();
+    const { topic, title, category, language="ar", length="medium", keywords="" } = body || {};
+    if (!topic?.trim() && !title?.trim()) return Response.json({ error:"Topic or title is required" }, { status:400 });
+
+    const { data: profile } = await supabase.from("profiles").select("role,article_credits").eq("id", user.id).maybeSingle();
+    const isAdmin = profile?.role === "admin";
+    if (!isAdmin && Number(profile?.article_credits || 0) < 1) return Response.json({ error:"رصيد المقالات غير كافٍ" }, { status:402 });
+
+    const writing = await geminiGenerate(buildWritingPrompt({topic:topic.trim(),title,category,language,length,keywords}));
+    if (!writing) throw Error("تعذر إنشاء المقال");
+    const sections = extractSections(writing);
+    const image1 = await fluxImage(imageContext({topic,title:title?.trim()||topic.trim(),category,keywords,section:"main topic",position:1}));
+    const image2 = await fluxImage(imageContext({topic,title:title?.trim()||topic.trim(),category,keywords,section:sections[0] || "first main section",position:2}));
+    const url1 = await uploadImage(supabase,image1,user.id,1);
+    const url2 = await uploadImage(supabase,image2,user.id,2);
+    const content = insertImages(writing,url1,url2);
+
+    if (!isAdmin) {
+      const { data: consumed, error:ce } = await supabase.rpc("consume_article_credit", { p_user_id:user.id });
+      if (ce) throw ce;
+      if (consumed === false) return Response.json({ error:"رصيد المقالات غير كافٍ" }, { status:402 });
+    }
+    const { data: article, error:ae } = await supabase.from("articles").insert({ user_id:user.id,title:title?.trim()||topic.trim(),content,status:"draft" }).select("id,title,content,status,created_at").single();
+    if (ae) throw ae;
+    return Response.json({ article, images:[url1,url2] });
+  } catch (e) {
+    return Response.json({ error:e?.message || "Generation failed" }, { status:500 });
+  }
+}
