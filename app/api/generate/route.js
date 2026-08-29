@@ -42,16 +42,42 @@ async function geminiGenerate(prompt) {
   if (!r.ok) throw Error(j?.error?.message || `Gemini HTTP ${r.status}`);
   return j?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("")?.trim() || "";
 }
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+function isTemporaryFluxError(message) {
+  const m = String(message || "").toLowerCase();
+  return /high demand|temporarily|try again later|rate limit|too many requests|overloaded|unavailable|429|capacity/.test(m);
+}
 async function fluxImage(prompt) {
   const account = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
   if (!account || !token) throw Error("Cloudflare Workers AI configuration is incomplete");
-  const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/@cf/black-forest-labs/flux-1-schnell`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ prompt, steps: 4 }) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || j?.success === false) throw Error(j?.errors?.[0]?.message || j?.result?.error || `FLUX HTTP ${r.status}`);
-  const b64 = j?.result?.image || j?.result?.images?.[0];
-  if (!b64) throw Error("FLUX did not return an image");
-  return Buffer.from(b64, "base64");
+  const maxAttempts = 4;
+  let lastError = "FLUX generation failed";
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/@cf/black-forest-labs/flux-1-schnell`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ prompt, steps: 4 }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.success === false) {
+        lastError = j?.errors?.[0]?.message || j?.result?.error || `FLUX HTTP ${r.status}`;
+        if (attempt < maxAttempts && (r.status === 429 || r.status >= 500 || isTemporaryFluxError(lastError))) {
+          await sleep(2500 * attempt);
+          continue;
+        }
+        throw Error(lastError);
+      }
+      const b64 = j?.result?.image || j?.result?.images?.[0];
+      if (!b64) throw Error("FLUX did not return an image");
+      return Buffer.from(b64, "base64");
+    } catch (e) {
+      lastError = e?.message || lastError;
+      if (attempt < maxAttempts && isTemporaryFluxError(lastError)) {
+        await sleep(2500 * attempt);
+        continue;
+      }
+      throw Error(lastError);
+    }
+  }
+  throw Error(lastError);
 }
 async function uploadImage(supabase, bytes, userId, index) {
   const path = `${userId}/${Date.now()}-${index}-${crypto.randomUUID()}.jpg`;
@@ -82,21 +108,15 @@ export async function POST(req) {
     const body = await req.json();
     const { topic, title, category, language = "ar", length = "medium", keywords = "" } = body || {};
     if (!topic?.trim() && !title?.trim()) return Response.json({ error: "Topic or title is required" }, { status: 400 });
-
-    // Admin status comes only from the protected profiles.role field.
-    // Article credits live in wallets, not profiles.
     const { data: profile, error: pe } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
     if (pe) throw pe;
     const isAdmin = profile?.role === "admin";
-
-    let credits = 0;
     if (!isAdmin) {
       const { data: wallet, error: we } = await supabase.from("wallets").select("article_credits").eq("user_id", user.id).maybeSingle();
       if (we) throw we;
-      credits = Number(wallet?.article_credits || 0);
+      const credits = Number(wallet?.article_credits || 0);
       if (credits < 1) return Response.json({ error: "رصيد المقالات غير كافٍ" }, { status: 402 });
     }
-
     const articleTitle = title?.trim() || topic.trim();
     const writing = await geminiGenerate(buildWritingPrompt({ topic: topic.trim(), title: articleTitle, category, language, length, keywords }));
     if (!writing) throw Error("تعذر إنشاء المقال");
@@ -106,7 +126,6 @@ export async function POST(req) {
     const url1 = await uploadImage(supabase, image1, user.id, 1);
     const url2 = await uploadImage(supabase, image2, user.id, 2);
     const content = insertImages(writing, url1, url2);
-
     if (!isAdmin) {
       const { data: consumed, error: ce } = await supabase.rpc("consume_article_credit", { p_user_id: user.id });
       if (ce) throw ce;
