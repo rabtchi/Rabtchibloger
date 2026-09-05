@@ -1,5 +1,5 @@
 export default function robots() {
-  const baseUrl = 'https://rabtchibloger.vercel.app';
+  const baseUrl = 'https://www.rabtchi.com';
 
   return {
     rules: {
