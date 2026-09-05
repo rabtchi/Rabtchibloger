@@ -1,5 +1,5 @@
 export default function sitemap() {
-  const baseUrl = 'https://rabtchibloger.vercel.app';
+  const baseUrl = 'https://www.rabtchi.com';
   const now = new Date();
 
   return [
